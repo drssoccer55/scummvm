@@ -59,6 +59,7 @@ private:
 	bool Cmd_PrintDraft(int argc, const char **argv);
 	bool Cmd_PrintGrail(int argc, const char **argv);
 	bool Cmd_Passcode(int argc, const char **argv);
+	bool Cmd_Doug(int argc, const char** argv);
 
 	bool Cmd_Debug(int argc, const char **argv);
 
@@ -73,6 +74,8 @@ private:
 
 	void printBox(int box);
 	void drawBox(int box);
+	static void timerProc(void* refCon);
+	void onTimer();
 };
 
 } // End of namespace Scumm

@@ -24,6 +24,7 @@
 #include "common/str.h"
 #include "common/system.h"
 #include "common/util.h"
+#include "common/timer.h"
 
 #include "scumm/actor.h"
 #include "scumm/boxes.h"
@@ -47,6 +48,17 @@ void debugC(int channel, const char *s, ...) {
 	//	  Add setting from commandline ( / abstract channel interface)
 	if (!DebugMan.isDebugChannelEnabled(channel) && (gDebugLevel < 9))
 		return;
+
+	va_start(va, s);
+	vsnprintf(buf, STRINGBUFLEN, s, va);
+	va_end(va);
+
+	debug("%s", buf);
+}
+
+void debugC2(const char* s, ...) {
+	char buf[STRINGBUFLEN];
+	va_list va;
 
 	va_start(va, s);
 	vsnprintf(buf, STRINGBUFLEN, s, va);
@@ -89,6 +101,9 @@ ScummDebugger::ScummDebugger(ScummEngine *s)
 		registerCmd("grail",  WRAP_METHOD(ScummDebugger, Cmd_PrintGrail));
 	if (_vm->_game.id == GID_MONKEY && _vm->_game.platform == Common::kPlatformSegaCD)
 		registerCmd("passcode",  WRAP_METHOD(ScummDebugger, Cmd_Passcode));
+
+	if (_vm->_game.id == GID_FOOTBALL)
+		registerCmd("doug", WRAP_METHOD(ScummDebugger, Cmd_Doug));
 
 	registerCmd("loadgame",  WRAP_METHOD(ScummDebugger, Cmd_LoadGame));
 	registerCmd("savegame",  WRAP_METHOD(ScummDebugger, Cmd_SaveGame));
@@ -1382,6 +1397,32 @@ bool ScummDebugger::Cmd_ResetCursors(int argc, const char **argv) {
 	_vm->resetCursors();
 	detach();
 	return false;
+}
+
+void ScummDebugger::timerProc(void* refCon) {
+	static_cast<ScummDebugger*>(refCon)->onTimer();
+}
+
+void ScummDebugger::onTimer() {
+	int i;
+	Actor* a;
+
+	for (i = 1; i < _vm->_numActors; i++) {
+		a = _vm->_actors[i];
+		const byte* name = _vm->getObjOrActorName(_vm->actorToObj(a->_number));
+		bool inActorRange = a->_number >= 1 && a->_number <= 11;
+		bool isPlayer = (a->getElevation() == 0 && (a->_bottom - a->_top) >= 0 && inActorRange); // TBD what is acceptable for actor (11 is football!)
+		if (a->_visible && isPlayer)
+			debugC2("actor|%2d|%4d|%4d|%3d|%3d|%3d|%3d|\n",
+				a->_number, a->getRealPos().x, a->getRealPos().y, a->_width, a->_bottom, a->_top,
+				a->_costume);
+	}
+}
+
+bool ScummDebugger::Cmd_Doug(int argc, const char** argv) {
+	debugPrintf("Installing timer\n");
+	// 33 milliseconds is about 30fps and 33000 microseconds
+	return g_system->getTimerManager()->installTimerProc(timerProc, 33000, this, "dougTimer");
 }
 
 } // End of namespace Scumm
