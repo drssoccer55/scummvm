@@ -296,6 +296,10 @@ public:
 		return _elevation;
 	}
 
+	int getSpeedX() const {
+		return _speedx;
+	}
+
 	void setElevation(int newElevation) {
 		if (_elevation != newElevation) {
 			_elevation = newElevation;

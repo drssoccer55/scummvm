@@ -105,6 +105,9 @@ ScummDebugger::ScummDebugger(ScummEngine *s)
 	if (_vm->_game.id == GID_FOOTBALL)
 		registerCmd("doug", WRAP_METHOD(ScummDebugger, Cmd_Doug));
 
+	if (_vm->_game.id == GID_FOOTBALL)
+		registerCmd("dougwip", WRAP_METHOD(ScummDebugger, Cmd_Dougwip));
+
 	registerCmd("loadgame",  WRAP_METHOD(ScummDebugger, Cmd_LoadGame));
 	registerCmd("savegame",  WRAP_METHOD(ScummDebugger, Cmd_SaveGame));
 
@@ -1423,6 +1426,33 @@ bool ScummDebugger::Cmd_Doug(int argc, const char** argv) {
 	debugPrintf("Installing timer\n");
 	// 33 milliseconds is about 30fps and 33000 microseconds
 	return g_system->getTimerManager()->installTimerProc(timerProc, 33000, this, "dougTimer");
+}
+
+void ScummDebugger::wipDebug() {
+	int i;
+	Actor* a;
+
+	debugPrintf("+----------------------------------------------------------------------------+\n");
+	debugPrintf("|# |    name    |  x |  y | w | h |elev|cos|box|mov| zp|frm|scl|dir|sped|size|\n");
+	debugPrintf("+--+------------+----+----+---+---+----+---+---+---+---+---+---+---+----+-----\n");
+	for (i = 1; i < _vm->_numActors; i++) {
+		a = _vm->_actors[i];
+		const byte* name = _vm->getObjOrActorName(_vm->actorToObj(a->_number));
+		if (a->_visible)
+			debugPrintf("|%2d|%-12.12s|%4d|%4d|%3d|%3d|%4d|%3d|%3d|%3d|%3d|%3d|%3d|%3d|%4d|%4d|\n",
+				a->_number, name, a->getRealPos().x, a->getRealPos().y, a->_width, a->_bottom - a->_top,
+				a->getElevation(),
+				a->_costume, a->_walkbox, a->_moving, a->_forceClip, a->_frame,
+				a->_scalex, a->getFacing(), a->getSpeedX(), _vm->getResourceSize(rtCostume, a->_costume));
+		;
+	}
+	debugPrintf("\n");
+}
+
+bool ScummDebugger::Cmd_Dougwip(int argc, const char** argv) {
+	debugPrintf("Doug wip\n");
+	wipDebug();
+	return true;
 }
 
 } // End of namespace Scumm
