@@ -183,6 +183,7 @@ bool debugChannelSet(int level, uint32 debugChannels) {
 #ifndef DISABLE_TEXT_CONSOLE
 
 static void debugHelper(const char *s, va_list va, bool caret = true) {
+	// This is where the debug happens
 	Common::String buf = Common::String::vformat(s, va);
 
 	if (caret)

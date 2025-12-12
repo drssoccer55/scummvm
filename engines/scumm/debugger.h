@@ -61,6 +61,14 @@ private:
 	bool Cmd_Passcode(int argc, const char **argv);
 	bool Cmd_Doug(int argc, const char** argv);
 	bool Cmd_Dougwip(int argc, const char** argv);
+	bool Cmd_DougBaseball(int argc, const char **argv);
+	bool Cmd_ExploreBaseballAkos(int argc, const char **argv);
+	bool Cmd_DumpRoomPaletteToFile(int argc, const char **argv);
+	bool Cmd_DumpActorBmp(int argc, const char **argv);
+	bool Cmd_DumpActorAnim(int argc, const char **argv);
+	bool Cmd_PlayerNamesScript(int argc, const char **argv);
+	bool Cmd_CostumeToTmpFile(int argc, const char **argv);
+	bool Cmd_CostumeLoad(int argc, const char **argv);
 
 	bool Cmd_Debug(int argc, const char **argv);
 
@@ -78,6 +86,8 @@ private:
 	static void timerProc(void* refCon);
 	void onTimer();
 	void wipDebug();
+	void printByteArrayForVar(int var, int len);
+	void write1DArrayVal(int var, int idx, int val);
 };
 
 } // End of namespace Scumm

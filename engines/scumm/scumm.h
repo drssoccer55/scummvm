@@ -525,6 +525,7 @@ class ScummEngine : public Engine, public Common::Serializable {
 	friend class MacGui;
 	friend class MacIndy3Gui;
 	friend class MacLoomGui;
+	friend class DoglasBaseball;
 
 public:
 	/* Put often used variables at the top.

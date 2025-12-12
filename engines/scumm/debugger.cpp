@@ -35,10 +35,36 @@
 #include "scumm/resource.h"
 #include "scumm/scumm.h"
 #include "scumm/sound.h"
+#include "scumm/he/intern_he.h"
+#include "scumm/doglasbaseball.h"
 
 #include "scumm/akos.h"
 
 namespace Scumm {
+
+// Just defining in this file bc problems with trying to use AkhdHeader
+struct AkhdStruct {
+	uint16 versionNumber;
+	uint16 costumeFlags;
+	uint16 choreCount;
+	uint16 celsCount;
+	uint16 celCompressionCodec;
+	uint16 layerCount;
+};
+
+struct AkciStruct {
+	uint16 width;
+	uint16 height;
+	int16 rel_x;
+	int16 rel_y;
+	int16 move_x;
+	int16 move_y;
+};
+
+struct AkofStruct {
+	uint32 akcd; // offset into the akcd data
+	uint16 akci; // offset into the akci data
+};
 
 void debugC(int channel, const char *s, ...) {
 	char buf[STRINGBUFLEN];
@@ -107,6 +133,17 @@ ScummDebugger::ScummDebugger(ScummEngine *s)
 
 	if (_vm->_game.id == GID_FOOTBALL)
 		registerCmd("dougwip", WRAP_METHOD(ScummDebugger, Cmd_Dougwip));
+
+	if (_vm->_game.id == GID_HEGAME) {
+		registerCmd("dougbaseball", WRAP_METHOD(ScummDebugger, Cmd_DougBaseball));
+		registerCmd("playball", WRAP_METHOD(ScummDebugger, Cmd_ExploreBaseballAkos));
+		registerCmd("roompalette", WRAP_METHOD(ScummDebugger, Cmd_DumpRoomPaletteToFile));
+		registerCmd("actorBmp", WRAP_METHOD(ScummDebugger, Cmd_DumpActorBmp));
+		registerCmd("actorAnim", WRAP_METHOD(ScummDebugger, Cmd_DumpActorAnim));
+		registerCmd("playerNameScript", WRAP_METHOD(ScummDebugger, Cmd_PlayerNamesScript));
+		registerCmd("costumeBytesToTmpFile", WRAP_METHOD(ScummDebugger, Cmd_CostumeToTmpFile));
+		registerCmd("costumeLoad", WRAP_METHOD(ScummDebugger, Cmd_CostumeLoad));
+	}
 
 	registerCmd("loadgame",  WRAP_METHOD(ScummDebugger, Cmd_LoadGame));
 	registerCmd("savegame",  WRAP_METHOD(ScummDebugger, Cmd_SaveGame));
@@ -645,7 +682,7 @@ bool ScummDebugger::Cmd_Cosdump(int argc, const char **argv) {
 				code = GB(4);
 				if (code & 0x80) {
 					code = READ_BE_UINT16(aksq + curState + 4);
-					debugPrintf("\tEXTENDED OFFSET %d POS %d,%d\n", code, GW(0), GW(2));
+					debugPrintf("\tEXTENDED OFFSET %d POS %d,%d\n", code & 0xFFF, GW(0), GW(2)); // DOUG - I added 0xFFF here
 					curState++;
 				} else {
 					debugPrintf("\tOFFSET %d POS %d,%d\n", code, GW(0), GW(2));
@@ -1453,6 +1490,188 @@ bool ScummDebugger::Cmd_Dougwip(int argc, const char** argv) {
 	debugPrintf("Doug wip\n");
 	wipDebug();
 	return true;
+}
+
+bool ScummDebugger::Cmd_DougBaseball(int argc, const char **argv) {
+	debugPrintf("Doglas Baseball\n");
+
+	const byte team_1[9] = {124, 31, 32, 33, 34, 35, 36, 37, 38}; // 124 timy unger
+	const byte team_2[9] = {39, 40, 41, 42, 43, 44, 45, 46, 47};
+
+	// For now don't care about batting order and playing order being different
+	for (int i = 0; i < 9; i++) {
+		write1DArrayVal(201, i, team_1[i]);
+		write1DArrayVal(269, i, team_1[i]);
+		write1DArrayVal(202, i, team_2[i]);
+		write1DArrayVal(270, i, team_2[i]);
+	}
+
+	printByteArrayForVar(201, 9);
+	printByteArrayForVar(202, 9);
+	printByteArrayForVar(269, 9);
+	printByteArrayForVar(270, 9);
+
+	return true;
+}
+
+void ScummDebugger::printByteArrayForVar(int var, int len) {
+	ScummEngine_v72he *_vm72 = (ScummEngine_v72he*)_vm;
+
+	for (int i = 0; i < len; i++) {
+		debugPrintf("%d,", _vm72->readArray(var, 0, i));
+	}
+	debugPrintf("\n");
+}
+
+void ScummDebugger::write1DArrayVal(int var, int idx, int val) {
+	ScummEngine_v72he *_vm72 = (ScummEngine_v72he *)_vm;
+	_vm72->writeArray(var, 0, idx, val);
+}
+
+bool ScummDebugger::Cmd_ExploreBaseballAkos(int argc, const char **argv) {
+	debugPrintf("playball\n");
+	Actor *a;
+	byte *akos;
+	for (int i = 1; i < _vm->_numActors; i++) {
+		a = _vm->_actors[i];
+		if (a->_number == 13) {
+			CostumeData costumeData = a->_cost;
+			akos = _vm->getResourceAddress(rtCostume, 13);
+			const AkhdStruct *_akhd = (const AkhdStruct *)_vm->findResourceData(MKTAG('A', 'K', 'H', 'D'), akos);
+			const byte *_akof = _vm->findResourceData(MKTAG('A', 'K', 'O', 'F'), akos); // defined
+			const byte *_akci = _vm->findResourceData(MKTAG('A', 'K', 'C', 'I'), akos); // defined
+			const byte *_aksq = _vm->findResourceData(MKTAG('A', 'K', 'S', 'Q'), akos); // defined
+			const byte *_akcd = _vm->findResourceData(MKTAG('A', 'K', 'C', 'D'), akos); // defined
+			const byte *_akpl = _vm->findResourceData(MKTAG('A', 'K', 'P', 'L'), akos); // not defined
+			const byte *_akct = _vm->findResourceData(MKTAG('A', 'K', 'C', 'T'), akos); // not defined
+			const byte *_rgbs = _vm->findResourceData(MKTAG('R', 'G', 'B', 'S'), akos); // not defined
+
+			const byte *roomPalette = _vm->getPalettePtr(0, 3);
+			for (int c = 0; c < 16; c++) {
+				const byte *color = _akpl + c;
+				if (c == 3) {
+					byte *assignable = (byte *)_akpl + c;
+					*assignable = 0xAC; // Tries to override white (actor 3 -> room 15 -> white) to (actor 1 -> room 172 -> red)
+				}
+				const byte *rgb = _rgbs + c;
+				const byte* r = roomPalette + (3 * c);
+				const byte *g = roomPalette + (3 * c + 1);
+				const byte *b = roomPalette + (3 * c + 2);
+				// looks like room 3 color 0 is 0,0,0
+				// color 1 is 0,0,171
+				// color 2 is 0,171,0
+				// 3 0,171,171
+				// 4 171,0,0
+				// 5 171,0,171
+				// 6 171,87,0
+
+				int placeholder = 2 + 2;
+			}
+			for (int j = 0; j < _akhd->celsCount; j++) {
+				const AkofStruct *_akof_frame = (AkofStruct *)(_akof + (j * 6)); // 6 is int32 and int16 with no padding
+
+				const AkciStruct *akciData = (AkciStruct *) (_akci + _akof_frame->akci);
+				const byte *akcdData = _akcd + _akof_frame->akcd;
+
+				// Alrighty we now have the raw encoded data. We know the width and height of the frame from the akci struct. Lets try to see if we can recreate image
+				int lastOffset = j == 0 ? 0 : ((AkofStruct *)(_akof + ((j - 1) * 6)))->akcd;
+				//int dataLen = _akof_frame->akcd - lastOffset;
+				int x = 0;
+				int y = 0;
+				bool allPixels = false;
+				int b_pos = 0;
+				while (!allPixels) {
+					byte cur = akcdData[b_pos++];
+					// Looks like baseball is 16 bit color. First 4 bits are color and next 4 are repeat.
+					byte color = cur >> 4;
+					byte rep = cur & 0xF; // F is 1111
+					if (!rep) { // if rep count is 0 the count is stored as the full next byte
+						rep = akcdData[b_pos++]; // full next byte is rep count!
+					}
+					while (rep > 0) {
+						byte room_color = *(_akpl + color); // color is local to actorPalette. Need to apply to get to roomPalette.
+						debugPrintf("%d,%d,%d->%d->rgb%d,%d,%d\n", x, y, color, room_color, *(roomPalette + (3 * room_color)), *(roomPalette + (3 * room_color + 1)), *(roomPalette + (3 * room_color + 2)));
+						rep--;
+						y++;
+						if (y >= akciData->height) {
+							y = 0;
+							x++;
+							if (x >= akciData->width) {
+								allPixels = true;
+								break;
+							}
+						}
+					}
+				}
+				int placeholder = 2 + 2;
+			}
+			int placeholder = 2 + 2;
+		}
+	}
+
+
+	return true;
+}
+
+bool ScummDebugger::Cmd_DumpRoomPaletteToFile(int argc, const char **argv) {
+	if (argc > 1) {
+		DoglasBaseball doglas = DoglasBaseball(_vm);
+		doglas.dumpRoomPalette(atoi(argv[1]));
+		return true;
+	} else {
+		debugPrintf("Usage roompalette <roomNum>");
+		return true;
+	}
+}
+
+bool ScummDebugger::Cmd_DumpActorBmp(int argc, const char **argv) {
+	if (argc > 1) {
+		DoglasBaseball doglas = DoglasBaseball(_vm);
+		doglas.dumpActorCostume(atoi(argv[1]));
+		return true;
+	} else {
+		debugPrintf("Usage actorBmp <actorNum>");
+		return true;
+	}
+}
+
+bool ScummDebugger::Cmd_DumpActorAnim(int argc, const char **argv) {
+	if (argc > 1) {
+		DoglasBaseball doglas = DoglasBaseball(_vm);
+		doglas.exploreActorCostumeAnimation(atoi(argv[1]), this);
+		return true;
+	} else {
+		debugPrintf("Usage actorAnim <actorNum>");
+		return true;
+	}
+}
+
+bool ScummDebugger::Cmd_PlayerNamesScript(int argc, const char **argv) {
+	DoglasBaseball doglas = DoglasBaseball(_vm);
+	doglas.playerNamesScript(this);
+	return true;
+}
+
+bool ScummDebugger::Cmd_CostumeToTmpFile(int argc, const char **argv) {
+	if (argc > 1) {
+		DoglasBaseball doglas = DoglasBaseball(_vm);
+		doglas.dumpResource(rtCostume, atoi(argv[1]));
+		return true;
+	} else {
+		debugPrintf("Usage costumeBytesToTmpFile <costumeNum>");
+		return true;
+	}
+}
+
+bool ScummDebugger::Cmd_CostumeLoad(int argc, const char **argv) {
+	if (argc > 1) {
+		DoglasBaseball doglas = DoglasBaseball(_vm);
+		doglas.loadAndLock(rtCostume, atoi(argv[1]), this);
+		return true;
+	} else {
+		debugPrintf("Usage costumeLoad <costumeNum>");
+		return true;
+	}
 }
 
 } // End of namespace Scumm

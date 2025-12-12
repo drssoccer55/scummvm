@@ -64,6 +64,7 @@ void ScummEngine::runScript(int script, bool freezeResistant, bool recursive, in
 			error("Local script %d is not in room %d", script, _roomResource);
 		scriptType = WIO_LOCAL;
 
+		// If I enabled this with "debug +SCRIPTS" this spits out a lot!
 		debugC(DEBUG_SCRIPTS, "runScript(%d) from %d-%d", script,
 				       number, _roomResource);
 	}

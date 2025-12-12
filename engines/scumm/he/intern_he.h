@@ -394,6 +394,8 @@ public:
 	int setupStringArray(int size) override;
 	virtual int setupStringArrayFromString(const char *cStr);
 	virtual void getStringFromArray(int arrayNumber, char *buffer, int maxLength);
+	int readArray(int array, int idx2, int idx1) override;
+	void writeArray(int array, int idx2, int idx1, int value) override;
 
 protected:
 	void setupOpcodes() override;
@@ -408,8 +410,7 @@ protected:
 	void checkExecVerbs() override;
 
 	byte *defineArray(int array, int type, int dim2start, int dim2end, int dim1start, int dim1end, bool newArray = false, int *newid = NULL);
-	int readArray(int array, int idx2, int idx1) override;
-	void writeArray(int array, int idx2, int idx1, int value) override;
+
 	void redimArray(int arrayId, int newDim2start, int newDim2end,
 					int newDim1start, int newDim1end, int type);
 	void checkArrayLimits(int array, int dim2start, int dim2end, int dim1start, int dim1end);
@@ -418,7 +419,6 @@ protected:
 	void copyArrayHelper(ArrayHeader *ah, int idx2, int idx1, int len1, byte **data, int *size, int *num);
 	int readFileToArray(int slot, int32 size);
 	void writeFileFromArray(int slot, int32 resID);
-
 	void decodeParseString(int a, int b) override;
 	void decodeScriptString(byte *dst, bool scriptString = false);
 	void copyScriptString(byte *dst, int dstSize);
