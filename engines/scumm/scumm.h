@@ -1043,6 +1043,7 @@ protected:
 	/* Script VM - should be in Script class */
 	uint32 _localScriptOffsets[1024];
 	Common::HashMap<int, byte *> _scriptOverrides;
+	Common::HashMap<int, Common::String> _costumeOverrides;
 	const byte *_scriptPointer = nullptr;
 	const byte *_scriptOrgPointer = nullptr;
 	const byte * const *_lastCodePtr = nullptr;
@@ -1173,6 +1174,7 @@ protected:
 	virtual uint32 getResourceRoomOffset(ResType type, ResId idx);
 
 	void scriptOverride(ResId room, int script);
+	void loadCostumeOverrides();
 
 public:
 	int getResourceSize(ResType type, ResId idx);

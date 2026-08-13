@@ -23,6 +23,7 @@
 #include "common/str.h"
 #include "common/memstream.h"
 #include "common/macresman.h"
+#include "common/formats/ini-file.h"
 #ifndef MACOSX
 #include "common/config-manager.h"
 #endif
@@ -677,6 +678,43 @@ void ScummEngine::scriptOverride(ResId room, int script) {
 	}
 }
 
+void ScummEngine::loadCostumeOverrides() {
+	if (strcmp(_game.gameid, "baseball") != 0)
+		return;
+
+	Common::Path resFilename = Common::Path("costume-overrides.cfg");
+	if (!Common::File::exists(resFilename))
+		return;
+
+	Common::INIFile iniFile;
+	if (!iniFile.loadFromFile(resFilename)) {
+		warning("loadCostumeOverrides(): Failed to parse file %s", resFilename.toString().c_str());
+		return;
+	}
+
+	if (!iniFile.hasSection("costumes")) {
+		warning("loadCostumeOverrides(): No [costumes] section in file %s", resFilename.toString().c_str());
+		return;
+	}
+
+	const Common::INIFile::SectionKeyList keys = iniFile.getKeys("costumes");
+	for (Common::INIFile::SectionKeyList::const_iterator it = keys.begin(); it != keys.end(); ++it) {
+		const char *keyStr = it->key.c_str();
+		char *endPtr = nullptr;
+		long costumeId = strtol(keyStr, &endPtr, 10);
+		if (endPtr == keyStr || *endPtr != '\0' || costumeId < 0 || costumeId > 0xFFFF) {
+			warning("loadCostumeOverrides(): Invalid costume id \"%s\" in file %s", keyStr, resFilename.toString().c_str());
+			continue;
+		}
+		if (it->value.empty()) {
+			warning("loadCostumeOverrides(): No file given for costume %ld in file %s", costumeId, resFilename.toString().c_str());
+			continue;
+		}
+		debug(1, "loadCostumeOverrides(): Costume %ld overridden by %s", costumeId, it->value.c_str());
+		_costumeOverrides[costumeId] = it->value;
+	}
+}
+
 int ScummEngine::loadResource(ResType type, ResId idx) {
 	int roomNr;
 	uint32 fileOffs;
@@ -708,6 +746,24 @@ int ScummEngine::loadResource(ResType type, ResId idx) {
 
 				return 1;
 			}
+		}
+	}
+
+	if (type == rtCostume) {
+		Common::HashMap<int, Common::String>::iterator overrideIt = _costumeOverrides.find(idx);
+		if (overrideIt != _costumeOverrides.end()) {
+			Common::Path resFilename = Common::Path(overrideIt->_value);
+			if (Common::File::exists(resFilename)) {
+				Common::File resFile;
+				if (resFile.open(resFilename)) {
+					size = resFile.size();
+					resFile.read(_res->createResource(type, idx, size), size);
+					debug(1, "loadResource(%s,%d): costume loaded from file %s", nameOfResType(type), idx, resFilename.toString().c_str());
+
+					return 1;
+				}
+			}
+			warning("loadResource(%s,%d): costume override file %s is missing; using game data", nameOfResType(type), idx, resFilename.toString().c_str());
 		}
 	}
 

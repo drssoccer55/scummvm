@@ -1808,6 +1808,8 @@ void ScummEngine::setupScumm(const Common::Path &macResourceFile) {
 	// MI2 NI DOS Demo, load demo.rec playback file if present
 	if ((_game.id == GID_MONKEY2) && (_game.features & GF_DEMO) && (_game.platform == Common::kPlatformDOS) && !ConfMan.getBool("disable_mi2_ni_demo"))
 		_playback.tryLoadPlayback(this);
+
+	loadCostumeOverrides();
 }
 
 #ifdef ENABLE_SCUMM_7_8
