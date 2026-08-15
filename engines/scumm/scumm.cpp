@@ -43,6 +43,7 @@
 #include "scumm/charset.h"
 #include "scumm/costume.h"
 #include "scumm/debugger.h"
+#include "scumm/remote_console.h"
 #include "scumm/detection_tables.h"
 #include "scumm/dialogs.h"
 #include "scumm/file.h"
@@ -476,6 +477,7 @@ ScummEngine::ScummEngine(OSystem *syst, const DetectorResult &dr)
 
 
 ScummEngine::~ScummEngine() {
+	delete _remoteConsole;
 	delete _musicEngine;
 
 	// Delete the sound object earlier than the actors
@@ -1542,6 +1544,10 @@ Common::Error ScummEngine::init() {
 
 	// Create the debugger now that _numVariables has been set
 	setDebugger(new ScummDebugger(this));
+
+	// Start the remote debug console (no-op on non-POSIX builds).
+	_remoteConsole = new RemoteConsole(getDebugger());
+	_remoteConsole->start();
 
 	Common::Keymapper *keymapper = _system->getEventManager()->getKeymapper();
 	_insaneKeymap = keymapper->getKeymap(insaneKeymapId);
@@ -2915,6 +2921,9 @@ Common::Error ScummEngine::go() {
 		// of the main loop.
 
 		waitForTimer(delta * 4);
+
+		// Service the remote debug console (no-op on non-POSIX builds).
+		_remoteConsole->poll();
 
 		// Run the main loop
 		if (!isPaused()) {

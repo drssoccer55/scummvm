@@ -74,6 +74,13 @@ public:
 	 */
 	bool isActive() const { return _isActive; }
 
+	/**
+	 * Execute the given command line, as if it had been typed into the
+	 * debugger console. This allows engines to run debugger commands
+	 * programmatically, e.g. from a remote console.
+	 */
+	bool execCommand(const char *cmd);
+
 protected:
 	typedef Common::Functor1<const char *, bool> defaultCommand;
 	typedef Common::Functor2<int, const char **, bool> Debuglet;

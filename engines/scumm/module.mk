@@ -78,6 +78,7 @@ MODULE_OBJS := \
 	resource_v3.o \
 	resource_v4.o \
 	resource.o \
+	remote_console.o \
 	room.o \
 	saveload.o \
 	script_v0.o \

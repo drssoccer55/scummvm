@@ -3,3 +3,4 @@
 - I have 8 cpu cores so can do `make -j10` to build it
 - `make clean`
 - That creates the `./scummvm`
+- echo actors | nc localhost 44567 -w 1
