@@ -95,7 +95,6 @@ class IMuseDigital;
 class MacGui;
 class MusicEngine;
 class Player_Towns;
-class RemoteConsole;
 class ScummEngine;
 class ScummDebugger;
 class Sound;
@@ -545,9 +544,6 @@ public:
 	MusicEngine *_musicEngine = nullptr;
 	Player_Towns *_townsPlayer = nullptr;
 	Sound *_sound = nullptr;
-
-	/** Remote debug console (TCP socket). */
-	RemoteConsole *_remoteConsole = nullptr;
 
 	VerbSlot *_verbs = nullptr;
 	ObjectData *_objs = nullptr;

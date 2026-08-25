@@ -306,13 +306,6 @@ bool Debugger::handleCommand(int argc, const char **argv, bool &result) {
 	return false;
 }
 
-bool Debugger::execCommand(const char *cmd) {
-	if (!cmd)
-		return false;
-
-	return parseCommand(cmd);
-}
-
 // Command execution loop
 bool Debugger::parseCommand(const char *inputOrig) {
 	int num_params = 0;
