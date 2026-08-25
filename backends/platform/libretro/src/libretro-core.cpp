@@ -24,6 +24,8 @@
 #include "common/fs.h"
 #include "common/error.h"
 #include "streams/file_stream.h"
+#include <file/file_path.h>
+#include <retro_dirent.h>
 #include "graphics/surface.h"
 #ifdef _WIN32
 #include <direct.h>
@@ -39,6 +41,7 @@
 #endif
 
 #include <features/features_cpu.h> // cpu_features_get_time_usec()
+#include <retro_atomic.h>
 
 /**
  * Include base/internal_version.h to allow access to SCUMMVM_VERSION.
@@ -51,9 +54,11 @@
 
 #include "backends/platform/libretro/include/libretro-defs.h"
 #include "backends/platform/libretro/include/libretro-core.h"
+#include "backends/platform/libretro/include/libretro-gl-context-handoff.h"
 #include "backends/platform/libretro/include/libretro-threads.h"
 #include "backends/platform/libretro/include/libretro-core-options.h"
 #include "backends/platform/libretro/include/libretro-os.h"
+#include "backends/platform/libretro/include/libretro-fs.h"
 #include "backends/platform/libretro/include/libretro-mapper.h"
 
 static struct retro_game_info game_buf;
@@ -104,15 +109,31 @@ static retro_time_t audio_last_time_usec = 0; // timestamp of the previous audio
 static int16 *audio_sample_buffer = NULL; // pointer to output buffer
 
 static bool input_bitmask_supported = false;
+static bool browsing_mode_authorized = false;
 static bool updating_variables = false;
 
 #ifdef USE_OPENGL
 static struct retro_hw_render_callback hw_render;
 
+static bool context_reset_pending = false;
+
+void retro_set_context_reset_pending(void) {
+	context_reset_pending = true;
+}
+
+bool retro_consume_context_reset(void) {
+	bool pending = context_reset_pending;
+	context_reset_pending = false;
+	return pending;
+}
+
 static void context_reset(void) {
 	retro_log_cb(RETRO_LOG_DEBUG, "HW context reset\n");
+	/* The reset re-creates the GL context and reloads all GL entry points,
+	   which must happen on the emulation thread where the context is current.
+	   Defer it instead of calling it here on the frontend thread. */
 	if (retro_emu_thread_started())
-		LIBRETRO_G_SYSTEM->resetGraphicsContext();
+		retro_set_context_reset_pending();
 }
 
 static void context_destroy(void) {
@@ -138,14 +159,31 @@ static void retro_gui_res_reset() {
 }
 #endif
 
+/* Single-producer / single-consumer ring. The producer is ScummVM's MIDI
+   driver, the consumer is retro_midi_queue_drain() in retro_run(). With
+   USE_LIBCO those are the same OS thread and the fences below cost nothing;
+   without it they are two threads, and 'volatile' does not order the payload
+   stores against the cursor publish - the consumer could see an index before
+   the event it points at. */
 static retro_midi_event_t midi_queue[MIDI_QUEUE_SIZE];
-static volatile uint32 midi_head = 0; /* producer writes */
-static volatile uint32 midi_tail = 0; /* consumer writes */
+static retro_atomic_int_t midi_head = RETRO_ATOMIC_INT_INITIALIZER(0); /* published by producer */
+static retro_atomic_int_t midi_tail = RETRO_ATOMIC_INT_INITIALIZER(0); /* published by consumer */
 
 static void setup_hw_rendering(void) {
 
 	enum retro_pixel_format pixel_fmt;
 #ifdef USE_OPENGL
+	/* ScummVM issues its GL calls from the emulation thread, so the frontend's
+	   context has to travel with control at every thread switch. Without a
+	   backend for that handoff those calls would land on a thread with no
+	   current context, so stay on the software renderer instead. */
+	if ((video_hw_mode & VIDEO_GRAPHIC_MODE_REQUEST_HW) && !retro_gl_context_handoff_available()) {
+		if (retro_log_cb)
+			retro_log_cb(RETRO_LOG_WARN, "No GL context handoff backend available, falling back to software.\n");
+		retro_osd_notification("HW rendering unavailable on this platform.");
+		video_hw_mode = VIDEO_GRAPHIC_MODE_REQUEST_SW;
+	}
+
 	if (video_hw_mode & VIDEO_GRAPHIC_MODE_REQUEST_HW) {
 		pixel_fmt = RETRO_PIXEL_FORMAT_XRGB8888;
 		if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &pixel_fmt) && retro_log_cb)
@@ -362,6 +400,17 @@ static void update_variables(void) {
 		sample_rate = atoi(sample_rate_var);
 	} else
 		sample_rate = DEFAULT_SAMPLE_RATE;
+
+	var.key = "scummvm_browsing_mode";
+	var.value = NULL;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+		browsing_mode_authorized = (strcmp(var.value, "authorized") == 0);
+	else
+#ifdef ANDROID
+		browsing_mode_authorized = true;
+#else
+		browsing_mode_authorized = false;
+#endif
 
 	var.key = "scummvm_mapper_up";
 	var.value = NULL;
@@ -642,6 +691,10 @@ uint16 retro_setting_get_sample_rate(void) {
 	return sample_rate;
 }
 
+bool retro_setting_get_browsing_mode_authorized(void) {
+	return browsing_mode_authorized;
+}
+
 
 static uint32 next_pow2(uint32 x) {
 	if (x <= 1) return 1;
@@ -660,7 +713,7 @@ uint16 retro_setting_get_audio_samples_buffer_size(void) {
 	for (uint16 v : allowed) {
 		if (pow2 <= v) return v;
 	}
-	return allowed[sizeof(allowed)/sizeof(allowed[0])];
+	return allowed[ARRAYSIZE(allowed) - 1];
 }
 
 void init_command_params(void) {
@@ -794,6 +847,7 @@ void retro_set_input_state(retro_input_state_t cb) {
 
 void retro_set_environment(retro_environment_t cb) {
 	environ_cb = cb;
+
 	bool tmp = true;
 	bool has_categories;
 	environ_cb(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME, &tmp);
@@ -864,6 +918,15 @@ const char *retro_get_system_dir(void) {
 	return sysdir;
 }
 
+const char *retro_get_file_browser_start_dir(void) {
+	const char *startdir = NULL;
+
+	if (!environ_cb || !environ_cb(RETRO_ENVIRONMENT_GET_FILE_BROWSER_START_DIRECTORY, &startdir))
+		return NULL;
+
+	return startdir;
+}
+
 const char *retro_get_save_dir(void) {
 	const char *savedir = NULL;
 
@@ -881,16 +944,22 @@ const char *retro_get_playlist_dir(void) {
 }
 
 void retro_midi_queue_push(uint8 byte, uint32 delta_us) {
-	uint32 next = (midi_head + 1) & (MIDI_QUEUE_SIZE - 1);
+	/* The producer owns head, so it can read it plainly; tail needs an
+	   acquire load to pair with the consumer's release below. */
+	int head = retro_atomic_load_acquire_int(&midi_head);
+	int next = (head + 1) & (MIDI_QUEUE_SIZE - 1);
 
-	if (next == midi_tail) {
+	if (next == retro_atomic_load_acquire_int(&midi_tail)) {
 		/* Queue full → drop event (acceptable for MIDI) */
 		return;
 	}
 
-	midi_queue[midi_head].byte     = byte;
-	midi_queue[midi_head].delta_us = delta_us;
-	midi_head = next;
+	midi_queue[head].byte     = byte;
+	midi_queue[head].delta_us = delta_us;
+
+	/* Release: the two stores above are visible to any thread that
+	   acquire-loads this index. */
+	retro_atomic_store_release_int(&midi_head, next);
 }
 
 static void retro_midi_queue_drain(void) {
@@ -902,17 +971,23 @@ static void retro_midi_queue_drain(void) {
 		return;
 
 	bool did_write = false;
+	int tail = retro_atomic_load_acquire_int(&midi_tail);
+	int head = retro_atomic_load_acquire_int(&midi_head);
 
-	while (midi_tail != midi_head) {
-		retro_midi_event_t ev = midi_queue[midi_tail];
-		midi_tail = (midi_tail + 1) & (MIDI_QUEUE_SIZE - 1);
+	while (tail != head) {
+		retro_midi_event_t ev = midi_queue[tail];
+		tail = (tail + 1) & (MIDI_QUEUE_SIZE - 1);
 
 		retro_midi_interface->write(ev.byte, ev.delta_us);
 		did_write = true;
 	}
 
-	if (did_write)
+	if (did_write) {
+		/* Publish once: the producer only needs to know the slots are
+		   free, not how far along the drain got. */
+		retro_atomic_store_release_int(&midi_tail, tail);
 		retro_midi_interface->flush();
+	}
 }
 
 void retro_init(void) {
@@ -922,10 +997,49 @@ void retro_init(void) {
 	else
 		retro_log_cb = NULL;
 
+	struct retro_vfs_interface_info vfs_iface;
+	vfs_iface.required_interface_version = STAT64_REQUIRED_VFS_VERSION;
+	vfs_iface.iface = nullptr;
+
+	bool vfs_ok = environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_iface);
+
+	if (vfs_ok) {
+		filestream_vfs_init(&vfs_iface);
+		path_vfs_init(&vfs_iface);
+		dirent_vfs_init(&vfs_iface);
+	}
+
+	LibRetroFilesystemNode::clearAuthorizedLocations();
+
+	{
+		struct retro_vfs_authorized_locations locations;
+		memset(&locations, 0, sizeof(locations));
+
+		if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_VFS_AUTHORIZED_LOCATIONS, &locations) &&
+				locations.locations) {
+			for (size_t i = 0; i < locations.count; ++i) {
+				const char *path = locations.locations[i].path;
+				const char *label = locations.locations[i].label;
+
+				if (path && *path)
+					LibRetroFilesystemNode::addAuthorizedLocation(
+							Common::String(path),
+							label ? Common::String(label) : Common::String());
+			}
+		}
+	}
+
 	if (retro_log_cb)
 		retro_log_cb(RETRO_LOG_DEBUG, "ScummVM core version: %s\n", __GIT_VERSION);
 
 	update_variables();
+
+	if (retro_setting_get_browsing_mode_authorized() && !LibRetroFilesystemNode::hasAuthorizedLocations()) {
+		if (retro_log_cb)
+			retro_log_cb(RETRO_LOG_WARN, "[scummvm] Browsing mode set to 'Authorized storage' but no authorized locations are available; falling back to local filesystem. Authorize folders from the frontend and restart the core.\n");
+		retro_osd_notification("No authorized storage available, using local filesystem.");
+	}
+
 	max_width = gui_width > max_width ? gui_width : max_width;
 	max_height = gui_height > max_height ? gui_height : max_height;
 
@@ -1145,7 +1259,9 @@ void retro_run(void) {
 
 	/* Setting RA's video or audio driver to null will disable video/audio bits */
 	int audio_video_enable = 0;
-	environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &audio_video_enable);
+	if (!environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &audio_video_enable))
+		/* If this flag is not supported, the core assumes that the frontend will not skip any steps, as per API contract */
+		audio_video_enable = RETRO_AV_ENABLE_VIDEO | RETRO_AV_ENABLE_AUDIO;
 
 	if (g_system) {
 		/* Switch to ScummVM thread */

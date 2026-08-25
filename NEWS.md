@@ -20,6 +20,9 @@ For a more comprehensive changelog of the latest experimental code, see:
    - Added support for Chamber of the Sci-Mutant Priestess.
    - Added support for Star Wars: Rebel Assault.
    - Added support for Star Wars: Rebel Assault II: The Hidden Empire.
+   - Added support for Dragonsphere.
+   - Added support for Return of the Phantom.
+   - Added support for Once Upon a Forest.
 
  General:
    - Optimised mixing and rate converters, for better performance.
@@ -60,6 +63,7 @@ For a more comprehensive changelog of the latest experimental code, see:
    - Numerous Riddle of Master Lu fixes for crashes, missing functionality, and game bugs.
    - Fixed original game bug where conversations with Wolf could freeze the game.
    - Added original game cheat codes for bypassing the maze.
+   - Added translation of message log entries
 
  MM:
    - Fix multiple M&M1 classic combat crashes.
@@ -69,12 +73,18 @@ For a more comprehensive changelog of the latest experimental code, see:
    - Improved M&M1 Enhanced mouse support, character generation, and general in-game UI.
    - Fixed cutscene subtitle rendering.
    - Added Xeen French translation.
-   - Fix Pharoah voice line repeating in Dark Side of Xeen intro.
+   - Fix Pharaoh voice line repeating in Dark Side of Xeen intro.
 
  NANCY:
    - Generic flags are no longer cleared when saving or auto-saving. Clearing
      them introduced issues when auto-saving was done in some scenes.
    - Loading from the GMM is now possible before starting a new scene.
+   - It's now possible to skip cutscenes and dialog lines with escape.
+   - Mouse wheel functionality has been added to several UI widgets.
+   - Fixed issues with the memory puzzle in Nancy9.
+   - Fixed issues with the "I can't" item sound.
+   - Answers entered in password kind of puzzles are now more forgiving (e.g.
+     "Xoc" and "Lady Xoc" are now both acceptable answers).
 
  SCUMM:
    - Improved cursor scale in early Windows HE games.
@@ -84,6 +94,14 @@ For a more comprehensive changelog of the latest experimental code, see:
 
  SLUDGE:
    - Added detection for Shape-Shift Escape.
+
+ TsAGE:
+   - Added General MIDI and MT-32 support to the games
+   - Improved Sound Blaster sample playback
+   - Sound is properly paused when the engine is paused
+
+ Voyeur:
+   - Match original first person movement with mouse when looking at mansion
 
  Atari port:
    - Added integration with nFM library.

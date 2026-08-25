@@ -188,6 +188,7 @@ ColonyEngine::ColonyEngine(OSystem *syst, const ADGameDescription *gd) : Engine(
 	memset(_dirXY, 0, sizeof(_dirXY));
 	memset(_visited, 0, sizeof(_visited));
 	_showAutomap = false;
+	_automapZoom = 1.0f;
 
 	// PATCH.C init
 	memset(_levelData, 0, sizeof(_levelData));
@@ -1054,6 +1055,14 @@ Common::Error ColonyEngine::run() {
 				case kActionFire:
 					cShoot();
 					break;
+				case kActionAutomapZoomIn:
+					if (_showAutomap)
+						changeAutomapZoom(true);
+					break;
+				case kActionAutomapZoomOut:
+					if (_showAutomap)
+						changeAutomapZoom(false);
+					break;
 				case kActionEscape:
 					_system->lockMouse(false);
 					CursorMan.setDefaultArrowCursor();
@@ -1345,6 +1354,65 @@ bool ColonyEngine::waitForInput() {
 		_system->updateScreen();
 		_system->delayMillis(10);
 	}
+	return false;
+}
+
+bool ColonyEngine::waitForMessageInput() {
+	// Ignore the input that opened the message.
+	_moveForward = _moveBackward = false;
+	_strafeLeft = _strafeRight = false;
+	_rotateLeft = _rotateRight = false;
+	_sprint = false;
+
+	Common::EventManager *eventMan = _system->getEventManager();
+	auto handleSystemEvent = [&](const Common::Event &event) {
+		if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
+			quitGame();
+			return false;
+		}
+		if (event.type == Common::EVENT_SCREEN_CHANGED)
+			_gfx->computeScreenViewport();
+		return true;
+	};
+
+	while (eventMan->getButtonState() && !shouldQuit()) {
+		Common::Event event;
+		while (eventMan->pollEvent(event)) {
+			if (!handleSystemEvent(event))
+				return false;
+		}
+		_system->updateScreen();
+		_system->delayMillis(10);
+	}
+
+	{
+		Common::Event event;
+		while (eventMan->pollEvent(event)) {
+			if (!handleSystemEvent(event))
+				return false;
+		}
+	}
+
+	eventMan->purgeMouseEvents();
+	eventMan->purgeKeyboardEvents();
+
+	while (!shouldQuit()) {
+		Common::Event event;
+		while (eventMan->pollEvent(event)) {
+			if (!handleSystemEvent(event))
+				return false;
+
+			if (event.type == Common::EVENT_LBUTTONDOWN ||
+					event.type == Common::EVENT_RBUTTONDOWN ||
+					event.type == Common::EVENT_KEYDOWN ||
+					event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START) {
+				return true;
+			}
+		}
+		_system->updateScreen();
+		_system->delayMillis(10);
+	}
+
 	return false;
 }
 

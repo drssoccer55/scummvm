@@ -73,7 +73,7 @@ public:
 	bool getMacintoshStoryLocked() const;
 	bool verifyMacintoshStoryPassword(const Common::String &password) const;
 	void setMacintoshDisplaySize(int displaySize, bool persist);
-	void setMacintoshHideMenuBar(bool hide, bool persist);
+	void setMacintoshHideMenuBar(bool hide);
 	void setMacintoshPreferencesAtStartup(bool show, bool persist);
 	void setMacintoshStoryLocked(bool locked,
 		const Common::String &password);
@@ -104,7 +104,7 @@ public:
 		int spacing) const override;
 	bool drawMacintoshText(FontPtr font, Buffer *target, const char *text,
 		int x, int y, int color, int spacing) const override;
-	bool getInterfaceSentenceColors(byte &foreground, byte &shadow) const override;
+	bool getInterfaceSentenceColor(byte &foreground) const override;
 	bool hasMacintoshInterface() const override;
 	bool setMacintoshPalette(const RGBcolor *palette, int firstColor,
 		int numColors) override;
